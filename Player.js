@@ -4,7 +4,7 @@ class Player {
         this.username = props.username;
         this.game = props.game;
         this.id = props.id;
-        console.log("done");
+        this.isReady = false;
     }
     getFields (){
         return this.fields;
@@ -18,6 +18,9 @@ class Player {
     }
     getUsername () {
         return this.username;
+    }
+    getId() {
+        return this.id;
     }
 }
 module.exports = Player;

@@ -1,13 +1,14 @@
 const Player = require("./Player");
 class Game {
-    constructor(props) {
-        if(props) {
-            this.players = props.players ? props.players : [];
-        } else {
-            this.players = [];
-        }
+    constructor( id=0, name="") {
         this.moves = [];
         this.turn = 1;
+        this.id = id;
+        this.name = name;
+        this.players = [];
+    }
+    getId(){
+        return this.id;
     }
     getPlayers () {
         return this.players;
@@ -24,8 +25,18 @@ class Game {
     getTurn () {
         return this.turn;
     }
-    addPlayer(id) {
-        this.players.push(new Player({id, game: this, username: "NONE"}));
+    addPlayer(id, username, socket) {
+        this.players.push(
+                {
+                    pl: new Player({id, game: this, username}),
+                    username,
+                    socket
+                }
+            );
+    }
+    removePlayer(id) {
+        this.players = this.players.filter(p => p.pl.id !== id);
+        return this.players.length > 0;
     }
 }
 module.exports = Game;

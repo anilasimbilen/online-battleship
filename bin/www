@@ -23,20 +23,138 @@ app.set('port', port);
 
 var server = http.createServer(app);
 var io = socketIO(server);
-var game = new Game();
+
+var games = [];
+var clients = [];
+var lastGameId = 0;
 
 io.on('connection', function (socket) {
   console.log("user connected " + socket.id);
-  console.log("number of players: " +( game.players.length + 1));
-  game.addPlayer(socket.id);
+  clients.push(socket);
+  socket.emit("INITIAL_USER_DATA", {
+    user_id: socket.id
+  });
   socket.on('disconnect', function() {
     console.log("user " + socket.id + " disconnected.");
-    console.log("number of users remaining: " + (game.players.length - 1));
-    game.players = game.players.filter(pl => {
+    clients = clients.filter(pl => {
       return pl.id !== socket.id;
     });
-  }
-);
+    try {
+      var game = games.map(g => g.getPlayers()).filter(pls => pls.map(({pl}) => pl.id).includes(socket.id))[0][0].pl.game;
+      let res = game.removePlayer(socket.id);
+      if(res) {
+        game.getPlayers()[0].socket.emit("OPPONENT_DISCONNECTED", {message: "Opponent disconnected."});
+      }
+    } catch(err){};
+  });
+  socket.on('CREATE_GAME', function (data) {
+    var game = new Game(lastGameId, data.room_name);
+    games.push(game);
+    game.addPlayer(data.user_id, data.username, socket);
+    socket.emit("GAME_INFO", {
+      game_id: lastGameId
+    });
+    socket.getGame = function () {
+      return game;
+    }
+    lastGameId++;
+  });
+  socket.on('CONNECT_GAME', function(data) {
+    var {game_id, username, user_id} = data;
+    let _game = null;
+    let gameIndex = -1;
+    for(let g in games) {
+      let curr = games[g];
+      if(curr.getId() == game_id) {
+        _game = curr;
+        gameIndex = g;
+        break;
+      }
+    }
+    if(_game === null) {
+      socket.emit("UNSUCCESS_CONNECTION",  {message: "No game with given id."});
+      return;
+    }
+    _game.addPlayer(user_id, username, socket);
+    games[gameIndex] = _game;
+    const players = _game.getPlayers();
+    let otherPlayer = players[0];
+    let oid = otherPlayer.pl.getId();
+    let uname = otherPlayer.username;
+    clients.filter(k => k.id == oid)[0].emit("SUCCESS_CONNECTION", {enemy: {user_id, username}, game: {id: game_id, name: _game.name}}) 
+    socket.emit("SUCCESS_CONNECTION", {enemy: {user_id: oid, username: uname}, game: {id: game_id, name: _game.name}});
+  });
+  socket.on('STARTING_GAME', function(data){
+    var {game_id} = data;
+    let _game = null;
+    let gameIndex = -1;
+    for(let g in games) {
+      let curr = games[g];
+      if(curr.getId() === game_id) {
+        _game = curr;
+        gameIndex = g;
+        break;
+      }
+    }
+    if(_game === null) {
+      return;
+    }
+    const players = _game.getPlayers();
+    let otherPlayer = players[1];
+    otherPlayer.socket.emit("START_GAME", {success: true});
+    socket.emit("START_GAME", {success: true});
+  });
+  socket.on('PLAYER_READY_UPDATE', function(data) {
+    var {user_id, ready_state, game_id} = data;
+    let _game = null;
+    let gameIndex = -1;
+    for(let g in games) {
+      let curr = games[g];
+      if(curr.getId() === game_id) {
+        _game = curr;
+        gameIndex = g;
+        break;
+      }
+    }
+    if(_game === null) {
+      return;
+    }
+    _game.getPlayers().filter(p => p.pl.id !== user_id)[0].socket.emit("OPPONENT_READY");
+  });
+  socket.on("HIT", function(data) {
+    var {user_id, row, column, game_id} = data;
+    let _game = null;
+    let gameIndex = -1;
+    for(let g in games) {
+      let curr = games[g];
+      if(curr.getId() === game_id) {
+        _game = curr;
+        gameIndex = g;
+        break;
+      }
+    }
+    if(_game === null) {
+      return;
+    }
+    _game.getPlayers().filter(p => p.pl.id !== user_id)[0].socket.emit("MOVE_RECIEVED", {row, column});
+  });
+  socket.on("HIT_FEEDBACK", function(data) {
+    let {row, column, feedback, game_id, user_id} = data;
+    let _game = null;
+    let gameIndex = -1;
+    for(let g in games) {
+      let curr = games[g];
+      if(curr.getId() === game_id) {
+        _game = curr;
+        gameIndex = g;
+        break;
+      }
+    }
+    if(_game === null) {
+      return;
+    }
+    _game.getPlayers().filter(p => p.pl.id !== user_id)[0].socket.emit("BOARD_UPDATE", {row, column, feedback, sunk: data.sunk});
+  });
 });
 /**
  * Listen on provided port, on all network interfaces.

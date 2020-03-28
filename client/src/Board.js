@@ -38,13 +38,19 @@ const DESTROYER = {
     length: 2
 }
 
-const Styles = styled.div
+const StylesCreator = (game_state, owner = "none") => styled.div
 `
     .box {
-        width: 5vh;
-        height: 5vh;
+        width: ${game_state === "ingame" ? 4 : 5}vh;
+        height: ${game_state === "ingame" ? 4 : 5}vh;
         background-color: #d1cfcf;
         border: solid 1px;
+    }
+    .hit {
+        background-color: red;
+    }
+    .miss {
+        background-color: white;
     }
     .cruiser {
         background-color: ${CRUISER.color};
@@ -61,16 +67,29 @@ const Styles = styled.div
     .destroyer {
         background-color: ${DESTROYER.color};
     }
+    .sunk {
+        background-color: black;
+    }
     .main {
         display: flex;
         flex-direction: column;
-        width: 100%;
-        height: 50%;
+        height: ${game_state === "ingame" ? 50 : 40}%;
         justify-content: center;
         margin-top: 3vh;
     } 
     .building {
         cursor: pointer;
+    }
+    ${
+        owner === "self" ? "" : 
+        `
+        .ingame {
+            cursor: pointer;
+            :hover {
+                background-color: #b0b0b0;
+            }
+        }
+        `
     }
     h3 {
         font-size: 24px;
@@ -96,13 +115,12 @@ const {INITIAL_BOARD} = Object.freeze({INITIAL_BOARD: [
 ]});
 
 
-const SHIPS = [CARRIER, BATTLESHIP, CRUISER,SUBMARINE, DESTROYER];
+export const SHIPS = [CARRIER, BATTLESHIP, CRUISER,SUBMARINE, DESTROYER];
 export default class Board extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            totalCords: 
-            Object.freeze([
+            totalCords: props.initialCords ? this.copy2dArray(props.initialCords) :  Object.freeze([
                 ['E','E','E','E','E','E','E','E','E','E','E'],
                 ['E','E','E','E','E','E','E','E','E','E','E'],
                 ['E','E','E','E','E','E','E','E','E','E','E'],
@@ -119,9 +137,9 @@ export default class Board extends Component {
             submarine: {start: null, direction: null},
             destroyer: {start: null, direction: null},
             selected: 0,
-            currentDirection: "Direction",
+            currentDirection: "Horizontal",
             errorMessage: "",
-            renderingCords: Object.freeze([
+            renderingCords: props.initialCords ? this.copy2dArray(props.initialCords) :  Object.freeze([
                 ['E','E','E','E','E','E','E','E','E','E','E'],
                 ['E','E','E','E','E','E','E','E','E','E','E'],
                 ['E','E','E','E','E','E','E','E','E','E','E'],
@@ -147,16 +165,27 @@ export default class Board extends Component {
         this.preEdit=[[]];
         
     }
+    
     setStateTracker = (state) => {
         this.setState(state);
     }
+    componentWillReceiveProps(nextProps) {
+        if(nextProps.initialCords) {
+            this.setState({totalCords: this.copy2dArray(nextProps.initialCords), renderingCords: this.copy2dArray(nextProps.initialCords)})
+        }
+    }
     getOnClick = (e) => {
+        if(this.props.game_state !== "building") return this.props.onBoxClick(e);
         let box = e.target;
         let i, j; 
         [i, j] = box.id.split("|").map(k => Number(k));
         
         let {selected, currentDirection} = this.state;
         let nb = {start: [i, j], direction: currentDirection};
+
+        if(this.getOnMouseEnter(i,j)) return;
+
+
         if(selected === 0) {
             this.setState({
                 carrier: nb
@@ -178,7 +207,6 @@ export default class Board extends Component {
                 destroyer: nb
             });
         } else {
-            console.log("how");
             return;
         }
         this.setState({
@@ -249,7 +277,7 @@ export default class Board extends Component {
         this.preEdit=[[]];
     }
     getOnMouseEnter = (i, j) => {
-        if(this.state.selected >= 5) return;
+        if(this.state.selected >= 5 || this.props.game_state !== "building") return true;
         let {currentDirection, selected} = this.state;
         let totalCordsCopy = this.copy2dArray(this.state.totalCords);
         let renderingCords = this.copy2dArray(this.state.totalCords);
@@ -261,7 +289,7 @@ export default class Board extends Component {
                 for(let _i = 0; _i < ship.length; _i++) {
                     if(SHIPS.map(s => s.name.toLowerCase()).includes(this.state.totalCords[_i + i][j])) {
                         this.setStateTracker({errorMessage: "Can not add " + ship.name + " with given direciton because places are occupied."});
-                        return;
+                        return true;
                     }
                     renderingCords[_i + i][j] = ship.name.toLowerCase();
                 }
@@ -274,20 +302,25 @@ export default class Board extends Component {
                 for(let _j = 0; _j < ship.length; _j++) {
                     if(SHIPS.map(s => s.name.toLowerCase()).includes(this.state.totalCords[i][j + _j])) {
                         this.setStateTracker({errorMessage: "Can not add " + ship.name + " with given direciton because places are occupied."});
-                        return;
+                        return true;
                     }
                     renderingCords[i][_j + j] = ship.name.toLowerCase();
                 }
                 this.setStateTracker({renderingCords});
-
+                
             }
         }
     }
+    getOnMouseLeave = () => {
+        if(this.props.game_state !== "building") return;
+        this.setStateTracker({errorMessage: "", renderingCords: this.copy2dArray(this.state.totalCords)});
+    }
     render() {
         let {totalCords, renderingCords} = this.state;
+        const Styles = StylesCreator(this.props.game_state, this.props.owner);
         return(
-            <Styles style={{width: "100vw", height: "100vh", justifyContent: "center", alignItems: "center", display: "flex", flexDirection: "column"}}>
-                <h1>Place your board</h1>
+            <Styles style={this.props.game_state === "building" ? {width: "100vw", height: "100vh", justifyContent: "center", alignItems: "center", display: "flex", flexDirection: "column"} : {}}>
+                {this.props.game_state === "building" ? <h1>Place your board</h1> : null}
                 {this.props.game_state === "building" ? 
                   <div style={{display: "flex", flexDirection: "column", alignItems: "center"}}>
                         <ToggleButtonGroup type="radio" name="options" defaultValue={0} onChange={selected => {
@@ -317,7 +350,7 @@ export default class Board extends Component {
                             let splitted = e.target.id.split("|");
                             this.getOnMouseEnter(Number(splitted[0]), Number(splitted[1]));
                     }} onMouseLeave={e => {
-                        this.setStateTracker({errorMessage: "", renderingCords: this.copy2dArray(this.state.totalCords)});
+                        this.getOnMouseLeave();
                     }} onClick={this.getOnClick}  ref={r => {
                         this.buttons[i][j] = r; 
                     }} className={"box " + it + " " + this.props.game_state}/>))
@@ -325,14 +358,32 @@ export default class Board extends Component {
                     <h2 style={{color: "red", height: "1ch"}}>
                         {this.state.errorMessage}
                     </h2>
-                    <div className="bottom-btn-c">
+                    {this.props.game_state === "building" ? <div className="bottom-btn-c">
                         <Button onClick={this.reset}>
                             Reset
                         </Button>
                         {
-                            this.state.carrier.start && this.state.battleship.start && this.state.cruiser.start && this.state.submarine.start && this.state.destroyer.start ? <Button onClick={this.props.onBuildEnd}>Continue</Button> : null  
+                            this.state.carrier.start &&
+                             this.state.battleship.start &&
+                              this.state.cruiser.start &&
+                               this.state.submarine.start &&
+                                this.state.destroyer.start ?
+                                 <Button onClick={e => {
+                                         this.props.onBuildEnd({
+                                             data: {
+                                                totalCords: this.state.totalCords,
+                                                carrier: this.state.carrier,
+                                                battleship: this.state.battleship,
+                                                cruiser: this.state.cruiser, 
+                                                submarine: this.state.submarine, 
+                                                destroyer: this.state.destroyer
+                                               }
+                                            })
+                                        }
+                                    }
+                                    >Continue</Button> : null  
                         }
-                    </div>
+                    </div> : null}
             </Styles>
         );
     }
