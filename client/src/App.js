@@ -28,7 +28,7 @@ class App extends Component {
     
   }
   componentDidMount() {
-    this.socket = io("http://localhost:5000");
+    this.socket = io("https://battleship-multiplayer.herokuapp.com/");
     this.socket.on("INITIAL_USER_DATA", (data) =>  {
       this.setState({
         userId: data.user_id
